@@ -18,10 +18,10 @@ class ScatterVAE(nn.Module):
     """
 
     def __init__(self,
-                 input_dim: int = 110,
-                 latent_dim: int = 6,
-                 intermediate_layers: List = [90,70,50,30,10],
-                 device: str = 'cuda',
+                 input_dim: int = 4170, #4648, accounting for zeroed wavelengths
+                 latent_dim: int = 2,
+                 intermediate_layers: List = [5,3],
+                 device: str = 'cpu',
                  mixed_precision: bool = False
         ):
         super(ScatterVAE, self).__init__()
@@ -132,8 +132,9 @@ class ScatterVAE(nn.Module):
     ### TRAINING FUNCTION ###
 
     def fit(self,
-            xp: NDArray,
-            xp_err: NDArray,
+            flux: NDArray,
+            ivar: NDArray,
+            continuum: NDArray,
             batch_size: int = 512,
             val_batchsize_factor: int = 5,
             epochs: int = 64,
@@ -141,10 +142,10 @@ class ScatterVAE(nn.Module):
             lr_scheduler: torch.optim.lr_scheduler.LRScheduler = torch.optim.lr_scheduler.ReduceLROnPlateau,
             checkpoint_every_n_epochs: int = 0, # no checkpoints if 0
             terminate_on_nan: bool = True,
-            output_direc: str = '/geir_data/scr/alaroche/xp_vae',
+            output_direc: str = '/home/way/MDwarf_Continuum/auto_encoder/xp_vae',
         ) -> None:
         
-        grad_scaler = torch.cuda.amp.GradScaler(enabled=self.device_type == 'cuda')
+        grad_scaler = torch.cpu.amp.GradScaler() #torch.cuda.amp.GradScaler(enabled=self.device_type == 'cuda')
         self.epochs = epochs
         self.output_direc = output_direc
         
@@ -157,10 +158,12 @@ class ScatterVAE(nn.Module):
         train_metrics = open(f'%s/train_metrics.csv' % self.output_direc,'w')
         train_metrics.write('time,loss,mse_loss,kld_loss,val_loss,val_mse_loss,val_kld_loss,lr\n')
         
-        xp_train,xp_val,xp_err_train,xp_err_val = train_test_split(xp,xp_err,test_size=validation_split,random_state=12345) # for reproducibility of train/test split
+        flux_train, flux_val, ivar_train, ivar_val, continuum_train, continuum_val = train_test_split(flux, ivar, continuum,
+                                                                                                      test_size=validation_split, 
+                                                                                                      random_state=12345) # for reproducibility of train/test split
 
-        train_gen = DataGenerator(batch_size=batch_size,xp=xp_train,xp_err=xp_err_train)
-        val_gen = DataGenerator(batch_size=batch_size*val_batchsize_factor,xp=xp_val,xp_err=xp_err_val)
+        train_gen = DataGenerator(batch_size=batch_size,flux=flux_train,ivar=ivar_train,continuum=continuum_train)
+        val_gen = DataGenerator(batch_size=batch_size*val_batchsize_factor,flux=flux_val,ivar=ivar_val, continuum=continuum_val)
 
         scheduler = lr_scheduler(self.optimizer)
 
@@ -174,10 +177,10 @@ class ScatterVAE(nn.Module):
                 self.train()
                 running_loss,running_mse,running_kld=0.,0.,0.
                 
-                for batch_num, (xp,xp_err) in enumerate(train_gen):
+                for batch_num, (flux_n,ivar_n) in enumerate(train_gen):
                     self.optimizer.zero_grad()
                     with torch.autocast(device_type=self.device_type,enabled=self.mixed_precision):
-                        forward = self.forward(torch.from_numpy(xp).to(self.device_type),torch.from_numpy(xp_err).to(self.device_type))
+                        forward = self.forward(torch.from_numpy(flux_n.astype(np.float32)).to(self.device_type),torch.from_numpy((ivar_n**-0.5).astype(np.float32)).to(self.device_type))
                         loss,mse,kld = self.get_loss(*forward)
 
                         grad_scaler.scale(loss).backward()
@@ -197,8 +200,8 @@ class ScatterVAE(nn.Module):
                 self.eval()
                 running_val_loss,running_val_mse,running_val_kld=0.,0.,0.
                 with torch.inference_mode():
-                    for batch_num, (xp,xp_err) in enumerate(val_gen):
-                        forward = self.forward(torch.from_numpy(xp).to(self.device_type),torch.from_numpy(xp_err).to(self.device_type))
+                    for batch_num, (flux_n,ivar_n) in enumerate(val_gen):
+                        forward = self.forward(torch.from_numpy(flux_n.astype(np.float32)).to(self.device_type),torch.from_numpy((ivar_n**-0.5).astype(np.float32)).to(self.device_type))
                         vloss,vmse,vkld = self.get_loss(*forward)
 
                         running_val_loss += vloss.item()
