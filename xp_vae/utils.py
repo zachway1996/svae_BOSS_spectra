@@ -24,7 +24,7 @@ class DataGenerator(torch.utils.data.Dataset):
         self.flux = copy.deepcopy(flux)
         self.ivar = copy.deepcopy(ivar)
         
-        self.flux_n = copy.deepcopy(flux/continuum)
+        self.flux_n = copy.deepcopy(flux/continuum - 1)
         self.ivar_n = copy.deepcopy(ivar * continuum**2)
 
         self.data_length = len(self.flux_n)

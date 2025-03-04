@@ -19,8 +19,8 @@ class ScatterVAE(nn.Module):
 
     def __init__(self,
                  input_dim: int = 4170, #4648, accounting for zeroed wavelengths
-                 latent_dim: int = 2,
-                 intermediate_layers: List = [5,3],
+                 latent_dim: int = 3,
+                 intermediate_layers: List = [6, 3],
                  device: str = 'cpu',
                  mixed_precision: bool = False
         ):
@@ -106,28 +106,33 @@ class ScatterVAE(nn.Module):
         eps = torch.randn_like(sig)
         return eps*sig+mu
 
-    def forward(self, x, x_err):
+    def forward(self, x, x_ivar):
         mu, log_var = self.encode(x)
+        log_var = torch.clamp(log_var, max = 15.0)
         latent = self.reparam(mu, log_var)
         xhat = self.decode(latent)
         shat = self.intrinsic_scatter(latent)
-        return x, x_err, mu, log_var, xhat, shat
+        return x, x_ivar, mu, log_var, xhat, shat
 
     ### LOSS FUNCTIONS ###
 
     def get_loss(self, *forward):
-        x, x_err, mu, log_var, xhat, shat = forward
-        wmse = self.get_weighted_mse_loss(x, x_err, xhat, shat)
+        x, x_ivar, mu, log_var, xhat, shat = forward
+        wmse = self.get_weighted_mse_loss(x, x_ivar, xhat, shat)
         kld = self.get_kld(mu, log_var)
         loss = wmse+kld
         return loss, wmse, kld
 
-    def get_weighted_mse_loss(self, x, x_err, xhat, shat):
-        weight = x_err**2. + shat**2.
-        return torch.mean(torch.sum(0.5*(x-xhat)**2./weight + 0.5*torch.log(weight), dim=1), dim=0)
+    def get_weighted_mse_loss(self, x, x_ivar, xhat, shat):
+        weight = 1/x_ivar + shat**2.
+        sum_vectors = 0.5*(x-xhat)**2./weight + 0.5*torch.log(weight) 
+        sum_vectors[~torch.isfinite(sum_vectors)] = 0.
+        return torch.mean(torch.sum(sum_vectors, dim=1), dim=0)
     
     def get_kld(self, mu, log_var):
-        return torch.mean(-0.5 * torch.sum(1 + log_var - mu**2. - log_var.exp(), dim=1), dim=0)
+        sum_vectors = 1 + log_var - mu**2 - log_var.exp()
+        #sum_vectors[~torch.isfinite(sum_vectors)] = 0.
+        return torch.mean(-0.5*torch.sum(sum_vectors, dim=1), dim=0)
     
     ### TRAINING FUNCTION ###
 
@@ -145,7 +150,7 @@ class ScatterVAE(nn.Module):
             output_direc: str = '/home/way/MDwarf_Continuum/auto_encoder/xp_vae',
         ) -> None:
         
-        grad_scaler = torch.cpu.amp.GradScaler() #torch.cuda.amp.GradScaler(enabled=self.device_type == 'cuda')
+        grad_scaler = torch.amp.GradScaler('cpu') #torch.cuda.amp.GradScaler(enabled=self.device_type == 'cuda')
         self.epochs = epochs
         self.output_direc = output_direc
         
@@ -184,6 +189,10 @@ class ScatterVAE(nn.Module):
                         loss,mse,kld = self.get_loss(*forward)
 
                         grad_scaler.scale(loss).backward()
+                        ##try clipping gradient
+                        #grad_scaler.unscale_(self.optimizer)
+                        #torch.nn.utils.clip_grad_norm_()
+                        
                         grad_scaler.step(self.optimizer)
                         grad_scaler.update()
 
@@ -233,10 +242,17 @@ class ScatterVAE(nn.Module):
                                 % (str(timedelta(seconds=t)), curr_t, last_loss, last_mse, last_kld, avg_val_loss, avg_val_mse, avg_val_kld, lr_fmt))
                 train_log.flush()
 
-                train_metrics.write(f'%s,%s,%s,%s,%s,%s,%s,%s' % (curr_t, last_loss, last_mse, last_kld, avg_val_loss, avg_val_mse, avg_val_kld, lr_fmt))
+                train_metrics.write(f'%s,%s,%s,%s,%s,%s,%s,%s\n' % (curr_t, last_loss, last_mse, last_kld, avg_val_loss, avg_val_mse, avg_val_kld, lr_fmt))
                 train_metrics.flush()
 
                 if terminate_on_nan and np.isnan(last_loss):
+                    print('time,loss,mse_loss,kld_loss,val_loss,val_mse_loss,val_kld_loss,lr')
+                    print(curr_t, last_loss, last_mse, last_kld, avg_val_loss, avg_val_mse, avg_val_kld, lr_fmt)
+                    print(flux_train[0])
+                    print(ivar_train[0])
+                    print(continuum_train[0])
+                    print(train_gen.flux_n)
+                    print(train_gen.ivar_n)
                     raise ValueError('Nan loss, training terminated!')
                 
                 if checkpoint_every_n_epochs > 0:
