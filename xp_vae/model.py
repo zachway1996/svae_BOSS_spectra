@@ -137,9 +137,9 @@ class ScatterVAE(nn.Module):
     ### TRAINING FUNCTION ###
 
     def fit(self,
-            flux: NDArray,
-            ivar: NDArray,
-            continuum: NDArray,
+            flux_n: NDArray,
+            ivar_n: NDArray,
+            #continuum: NDArray,
             batch_size: int = 512,
             val_batchsize_factor: int = 5,
             epochs: int = 64,
@@ -163,12 +163,12 @@ class ScatterVAE(nn.Module):
         train_metrics = open(f'%s/train_metrics.csv' % self.output_direc,'w')
         train_metrics.write('time,loss,mse_loss,kld_loss,val_loss,val_mse_loss,val_kld_loss,lr\n')
         
-        flux_train, flux_val, ivar_train, ivar_val, continuum_train, continuum_val = train_test_split(flux, ivar, continuum,
+        flux_n_train, flux_n_val, ivar_n_train, ivar_n_val = train_test_split(flux_n, ivar_n, #continuum,
                                                                                                       test_size=validation_split, 
                                                                                                       random_state=12345) # for reproducibility of train/test split
 
-        train_gen = DataGenerator(batch_size=batch_size,flux=flux_train,ivar=ivar_train,continuum=continuum_train)
-        val_gen = DataGenerator(batch_size=batch_size*val_batchsize_factor,flux=flux_val,ivar=ivar_val, continuum=continuum_val)
+        train_gen = DataGenerator(batch_size=batch_size,flux_n=flux_n_train,ivar_n=ivar_n_train) #,continuum=continuum_train)
+        val_gen = DataGenerator(batch_size=batch_size*val_batchsize_factor,flux_n=flux_n_val,ivar_n=ivar_n_val) #, continuum=continuum_val)
 
         scheduler = lr_scheduler(self.optimizer)
 
@@ -250,7 +250,7 @@ class ScatterVAE(nn.Module):
                     print(curr_t, last_loss, last_mse, last_kld, avg_val_loss, avg_val_mse, avg_val_kld, lr_fmt)
                     print(flux_train[0])
                     print(ivar_train[0])
-                    print(continuum_train[0])
+                    #print(continuum_train[0])
                     print(train_gen.flux_n)
                     print(train_gen.ivar_n)
                     raise ValueError('Nan loss, training terminated!')

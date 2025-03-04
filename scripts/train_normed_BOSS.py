@@ -15,7 +15,7 @@ print('Number of threads', torch.get_num_threads(), flush=True)
 lr = 1e-4
 lr_min = 1e-10
 batch_size = 1024
-epochs = 250
+epochs = 10
 cos_anneal_t0 = 500
 check_every_n_epochs = 1
 num_data = int(1e7)
@@ -31,9 +31,10 @@ BOSS_NORM_PATH = '/home/way/MDwarf_Continuum/mdwarf_contin/M_dwarf_spec_coadd.h5
 f = h5py.File(BOSS_NORM_PATH,'r')
 
 print("Defining flux, ivar, continuum...", flush=True)
-flux = f['flux'][:,478:]
-ivar = f['ivar'][:,478:]
-continuum = f['continuum'][:,478:]
+N_SPECTRA = 5000
+flux = f['flux'][:N_SPECTRA,478:]
+ivar = f['ivar'][:N_SPECTRA,478:]
+continuum = f['continuum'][:N_SPECTRA,478:]
 
 print("Removing nans...", flush=True)
 nan_mask = (np.sum(~np.isnan(flux),axis=-1).astype('bool'))*(np.sum(~np.isnan(ivar),axis=-1).astype('bool'))*(np.sum(~np.isnan(continuum),axis=-1).astype('bool'))
@@ -48,23 +49,19 @@ ivar = ivar[z_ivar_mask]
 continuum = continuum[z_ivar_mask]
 
 print("Infinite error on outlier flux...", flush=True)
-flux_n = flux/continuum
+flux_n = flux/continuum - 1
 ivar_n = ivar*continuum**2
 
 outlier_mask = (flux_n>np.quantile(flux_n, 0.999)) | (flux_n<np.quantile(flux_n, 0.001)) | (ivar_n>np.quantile(ivar_n, 0.999))
 #outlier_mask = (flux_n>np.quantile(flux_n, 0.9)) | (flux_n<np.quantile(flux_n, 0.1))
-ivar[outlier_mask] = 0.
+ivar_n[outlier_mask] = 0.
 print("outlier pixels:", np.sum(outlier_mask))
 
 #ivar = ivar/10000
 
 #remove variables
-del flux_n
-del ivar_n
-
-print(flux[0])
-print(ivar[0])
-print(continuum[0])
+#del flux_n
+#del ivar_n
 
 print("Starting scheduler...", flush=True)
 lr_scheduler = lambda optimizer: torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
@@ -75,7 +72,7 @@ lr_scheduler = lambda optimizer: torch.optim.lr_scheduler.CosineAnnealingWarmRes
                                                                                     )
 
 print("Fitting model...", flush=True)
-model.fit(flux, ivar, continuum,
+model.fit(flux_n, ivar_n, #continuum,
           epochs=epochs,
           lr_scheduler=lr_scheduler,
           batch_size=batch_size,

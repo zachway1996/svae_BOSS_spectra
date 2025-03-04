@@ -10,22 +10,23 @@ class DataGenerator(torch.utils.data.Dataset):
 
     def __init__(self,
                  batch_size: int,
-                 flux: NDArray,
-                 ivar: NDArray,
-                 continuum: NDArray,
-                 #flux_n: NDArray,
-                 #ivar_n: NDArray
+                 #flux: NDArray,
+                 #ivar: NDArray,
+                 #continuum: NDArray,
+                 flux_n: NDArray,
+                 ivar_n: NDArray
         ):
 
         self.batch_size = batch_size
 
         # get rid of nans if they exist
-        nan_mask = (np.sum(~np.isnan(flux),axis=-1).astype('bool'))*(np.sum(~np.isnan(ivar),axis=-1).astype('bool'))*(np.sum(~np.isnan(continuum),axis=-1).astype('bool'))
-        self.flux = copy.deepcopy(flux)
-        self.ivar = copy.deepcopy(ivar)
+        #nan_mask = (np.sum(~np.isnan(flux),axis=-1).astype('bool'))*(np.sum(~np.isnan(ivar),axis=-1).astype('bool'))*(np.sum(~np.isnan(continuum),axis=-1).astype('bool'))
+        nan_mask = (np.sum(~np.isnan(flux_n),axis=-1).astype('bool'))*(np.sum(~np.isnan(ivar_n),axis=-1).astype('bool'))
+        self.flux_n = copy.deepcopy(flux_n)
+        self.ivar_n = copy.deepcopy(ivar_n)
         
-        self.flux_n = copy.deepcopy(flux/continuum - 1)
-        self.ivar_n = copy.deepcopy(ivar * continuum**2)
+        #self.flux_n = copy.deepcopy(flux/continuum - 1)
+        #self.ivar_n = copy.deepcopy(ivar * continuum**2)
 
         self.data_length = len(self.flux_n)
         self.steps_per_epoch = self.data_length // self.batch_size
