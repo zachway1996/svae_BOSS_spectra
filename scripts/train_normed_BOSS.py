@@ -42,20 +42,24 @@ flux = flux[nan_mask]
 ivar = ivar[nan_mask]
 continuum = continuum[nan_mask]
 
-print("Remove spectra with crazy ivar...", flush=True)
-z_ivar_mask = ~(np.sum((ivar==0), axis=-1)>4170/4)
-flux = flux[z_ivar_mask]
-ivar = ivar[z_ivar_mask]
-continuum = continuum[z_ivar_mask]
+#print("Remove spectra with crazy ivar...", flush=True)
+#z_ivar_mask = ~(np.sum((ivar==0), axis=-1)>4170/4)
+#flux = flux[z_ivar_mask]
+#ivar = ivar[z_ivar_mask]
+#continuum = continuum[z_ivar_mask]
 
-print("Infinite error on outlier flux...", flush=True)
+#print("Infinite error on outlier flux...", flush=True)
 flux_n = flux/continuum - 1
 ivar_n = ivar*continuum**2
 
-outlier_mask = (flux_n>np.quantile(flux_n, 0.999)) | (flux_n<np.quantile(flux_n, 0.001)) | (ivar_n>np.quantile(ivar_n, 0.999))
+print("Setting low ivar to zero...", flush=True)
+low_mask = (ivar_n<10**-2.5)
+ivar_n[low_mask] = 0.
+
+#outlier_mask = (flux_n>np.quantile(flux_n, 0.999)) | (flux_n<np.quantile(flux_n, 0.001)) | (ivar_n>np.quantile(ivar_n, 0.999))
 #outlier_mask = (flux_n>np.quantile(flux_n, 0.9)) | (flux_n<np.quantile(flux_n, 0.1))
-ivar_n[outlier_mask] = 0.
-print("outlier pixels:", np.sum(outlier_mask))
+#ivar_n[outlier_mask] = 0.
+#print("outlier pixels:", np.sum(outlier_mask))
 
 #ivar = ivar/10000
 
