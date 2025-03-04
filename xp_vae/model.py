@@ -19,8 +19,8 @@ class ScatterVAE(nn.Module):
 
     def __init__(self,
                  input_dim: int = 4170, #4648, accounting for zeroed wavelengths
-                 latent_dim: int = 3,
-                 intermediate_layers: List = [6, 3],
+                 latent_dim: int = 10,
+                 intermediate_layers: List = [2085, 1042, 521, 260, 100],
                  device: str = 'cpu',
                  mixed_precision: bool = False
         ):
