@@ -54,12 +54,16 @@ ivar_n = ivar*continuum**2
 
 print("Infinite error on outlier flux...", flush=True)
 outlier_mask = (flux_n - np.mean(flux_n) > np.quantile(flux_n - np.mean(flux_n), 0.99)) | \
-                (flux_n - np.mean(flux_n) < np.quantile(flux_n - np.mean(flux_n), 0.01))
+                (flux_n - np.mean(flux_n) < np.quantile(flux_n - np.mean(flux_n), 0.01)) | \
+                (ivar_n - np.mean(ivar_n) > np.quantile(ivar_n - np.mean(ivar_n), 0.99)) | \
+                (ivar_n - np.mean(ivar_n) < np.quantile(ivar_n - np.mean(ivar_n), 0.01))
 ivar_n[outlier_mask] = 0.
+print(outlier_mask.sum())
 
 print("Setting low ivar to zero...", flush=True)
-low_mask = (ivar_n<10**-2.5)
+low_mask = (ivar_n<10**-3)
 ivar_n[low_mask] = 0.
+
 
 print("Starting scheduler...", flush=True)
 lr_scheduler = lambda optimizer: torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer,
